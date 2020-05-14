@@ -1,1 +1,1 @@
-util.o: util.c types.h
+util.o: util.c io.h types.h
