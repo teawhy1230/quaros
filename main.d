@@ -1,1 +1,1 @@
-main.o: main.c lapic.h memory.h types.h io.h uart.h
+main.o: main.c memory.h types.h io.h uart.h lapic.h ioapic.h
