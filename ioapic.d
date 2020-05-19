@@ -1,1 +1,1 @@
-ioapic.o: ioapic.c types.h util.h trap.h
+ioapic.o: ioapic.c types.h util.h interrupt.h

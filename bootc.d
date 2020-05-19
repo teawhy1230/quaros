@@ -1,1 +1,1 @@
-bootc.o: bootc.c types.h asm.h memory.h trap.h elf.h
+bootc.o: bootc.c types.h asm.h memory.h interrupt.h elf.h
