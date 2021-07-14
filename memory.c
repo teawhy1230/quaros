@@ -47,7 +47,8 @@ void register_free_mem(char *start, char *end) {
 }
 
 
-pde_t *walk_pgdir(pde_t *pgdir, uint32_t vaddr) {
+// Return the pde that corresponds to vaddr
+pte_t *walk_pgdir(pde_t *pgdir, uint32_t vaddr) {
     pde_t *pde_p;
     pte_t *pgtab;
     pde_p = pgdir + ((vaddr >> 22) & 0x3ff);
@@ -56,6 +57,16 @@ pde_t *walk_pgdir(pde_t *pgdir, uint32_t vaddr) {
     }
     pgtab = (pte_t *)PHYS_TO_VIRT(*pde_p & (~0xfff));
     return pgtab + ((vaddr >> 12) & 0x3ff);
+}
+
+
+// Translate virtual address vaddr to higher half mapped kernel address.
+// The translated kernel address is a virtual address,
+// but since kernel is mapped in every process' pgdir,
+// the translated address can be used from any process.
+void *translate_kern(pde_t *pgdir, uint32_t vaddr) {
+    pte_t *pte_p = walk_pgdir(pgdir, vaddr);
+    return PHYS_TO_VIRT(*pte_p & (~0xfff)) + (vaddr & 0xfff);
 }
 
 
@@ -100,10 +111,8 @@ struct map_info kernel_map[] = {
 };
 
 
-pde_t *map_kernel(void) {
+pde_t *map_kernel(pde_t *pgdir) {
     uint32_t i;
-    pde_t *pgdir;
-    pgdir = kmalloc();
     memset(pgdir, 0, PGSIZE);
     for (i = 0; i < (sizeof(kernel_map) / sizeof(kernel_map[0])); i++) {
         map_memory(pgdir,
@@ -116,9 +125,28 @@ pde_t *map_kernel(void) {
 }
 
 
+// Map virtual address [0:size) to physical memory
+pde_t *map_user(pde_t *pgdir, uint32_t size) {
+    uint32_t i, va, pa;
+    uint32_t num_pages = size / PGSIZE;
+    if (size % PGSIZE != 0) {
+        num_pages++;
+    }
+
+    va = 0;
+    for (i = 0; i < num_pages; i++) {
+        pa = (uint32_t)kmalloc();
+        map_memory(pgdir, va, pa, PGSIZE, PTE_RW | PTE_US);
+    }
+
+    return pgdir;
+}
+
+
 pde_t *kpgdir = NULL;
 void init_kernel_memory(void) {
-    kpgdir = map_kernel();
+    kpgdir = kmalloc();
+    map_kernel(kpgdir);
     lcr3(kpgdir);
 }
 
@@ -132,15 +160,35 @@ void zero_out_bss(void) {
 
 struct segment_desc gdt[NUM_SEGMENTS];
 
-void set_segment_desc(struct segment_desc *desc, uint32_t base, uint32_t limit, uint8_t type, uint32_t dpl) {
-    desc->limit0 = limit & 0xffff;
+// Set segment descriptor with 4KB granularity
+// limit: limit in 32 bit address space
+void set_segment_desc_page(struct segment_desc *desc, uint32_t base, uint32_t limit, uint8_t type, uint32_t dpl) {
+    desc->limit0 = (limit >> 12) & 0xffff;
     desc->base0 = base & 0xffff;
     desc->base1 = (base >> 16) & 0xff;
     desc->type = type;
     desc->s = 1;
     desc->dpl = (dpl & 0x3);
     desc->p = 1;
-    desc->limit = (limit >> 16) & 0xff;
+    desc->limit = (limit >> 28) & 0xff;
+    desc->avl = 0;
+    desc->l = 0;
+    desc->d = 1;
+    desc->g = 1;
+}
+
+
+// Set segment descriptor with byte granularity
+// limit: limit in 20 bit address space
+void set_segment_desc_byte(struct segment_desc *desc, uint32_t base, uint32_t limit, uint8_t type, uint32_t dpl) {
+    desc->limit0 = (limit >> 12) & 0xffff;
+    desc->base0 = base & 0xffff;
+    desc->base1 = (base >> 16) & 0xff;
+    desc->type = type;
+    desc->s = 1;
+    desc->dpl = (dpl & 0x3);
+    desc->p = 1;
+    desc->limit = (limit >> 28) & 0xff;
     desc->avl = 0;
     desc->l = 0;
     desc->d = 1;
@@ -153,24 +201,24 @@ extern void reload_segment_regs(void);
 
 void init_segmentation(void) {
     memset(&gdt[NULL_SEG], 0, sizeof(struct segment_desc));
-    set_segment_desc(&gdt[KERN_DATA_SEG],
+    set_segment_desc_page(&gdt[KERN_DATA_SEG],
                      0x0,
-                     0xfffff,
+                     0xffffffff,
                      SEG_TYPE_RW,
                      DPL_KERN);
-    set_segment_desc(&gdt[KERN_CODE_SEG],
+    set_segment_desc_page(&gdt[KERN_CODE_SEG],
                      0x0,
-                     0xfffff,
+                     0xffffffff,
                      (SEG_TYPE_RW | SEG_TYPE_EX),
                      DPL_KERN);
-    set_segment_desc(&gdt[USER_DATA_SEG],
+    set_segment_desc_page(&gdt[USER_DATA_SEG],
                      0x0,
-                     0xfffff,
+                     0xffffffff,
                      SEG_TYPE_RW,
                      DPL_USER);
-    set_segment_desc(&gdt[USER_CODE_SEG],
+    set_segment_desc_page(&gdt[USER_CODE_SEG],
                      0x0,
-                     0xfffff,
+                     0xffffffff,
                      SEG_TYPE_RW | SEG_TYPE_EX,
                      DPL_USER);
 
@@ -180,4 +228,14 @@ void init_segmentation(void) {
     lgdt(&gdtr);
 
     reload_segment_regs();
+}
+
+
+void set_tss(struct task_state *tss_p) {
+    set_segment_desc_byte(&gdt[TASK_STATE_SEG],
+                          (uint32_t)tss_p,
+                          sizeof(struct task_state) - 1,
+                          SEG_TYPE_TSS,
+                          DPL_KERN);
+    ltr();
 }

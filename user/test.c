@@ -1,0 +1,6 @@
+int main(void) {
+    int acc, i;
+    for (i = 0; i < 10; i++) {
+        acc += i;
+    }
+}

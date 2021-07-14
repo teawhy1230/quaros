@@ -77,4 +77,16 @@ static inline void cli(void) {
 }
 
 
+static inline void ltr(void) {
+    uint16_t offset = TASK_STATE_SEG << 3;
+    __asm__ volatile (
+            "mov ax, %0\n\t"
+            "ltr ax\n\t"
+            :
+            : "r" (offset)
+            : "ax"
+            );
+}
+
+
 #endif

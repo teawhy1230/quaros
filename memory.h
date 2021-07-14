@@ -33,9 +33,10 @@ typedef uint32_t pte_t;
 #define PTE_US PDE_US
 
 
-#define NUM_SEGMENTS 5
+#define NUM_SEGMENTS 6
 #define SEG_TYPE_RW (1 << 1)
 #define SEG_TYPE_EX (1 << 3)
+#define SEG_TYPE_TSS (0x9)
 #define SEG_FLAG_GRAN (1 << 2)
 
 #define NULL_SEG (0)
@@ -43,6 +44,7 @@ typedef uint32_t pte_t;
 #define KERN_CODE_SEG (2)
 #define USER_DATA_SEG (3)
 #define USER_CODE_SEG (4)
+#define TASK_STATE_SEG (5)
 
 #define DPL_KERN (0)
 #define DPL_USER (3)
@@ -73,12 +75,60 @@ struct gdt_desc {
 } __attribute__((packed));
 
 
+struct task_state {
+    uint16_t link;
+    uint16_t pad0;
+
+    uint32_t esp0;
+    uint16_t ss0;
+    uint16_t pad1;
+    uint32_t esp1;
+    uint16_t ss1;
+    uint16_t pad2;
+    uint32_t esp2;
+    uint16_t ss2;
+    uint16_t pad3;
+
+    uint32_t cr3;
+    uint32_t eip;
+    uint32_t eflags;
+    uint32_t eax;
+    uint32_t ecx;
+    uint32_t edx;
+    uint32_t ebx;
+    uint32_t esp;
+    uint32_t ebp;
+    uint32_t esi;
+    uint32_t edi;
+
+    uint16_t es;
+    uint16_t pad4;
+    uint16_t cs;
+    uint16_t pad5;
+    uint16_t ss;
+    uint16_t pad6;
+    uint16_t ds;
+    uint16_t pad7;
+    uint16_t fs;
+    uint16_t pad8;
+    uint16_t gs;
+    uint16_t pad9;
+    uint16_t ldtr;
+    uint16_t pad10;
+    uint16_t pad11;
+    uint16_t iopb_offset;
+};
+
+
 void kfree(void *ptr);
 void *kmalloc(void);
 void register_free_mem(char *start, char *end);
 void init_kernel_memory(void);
 void init_segmentation(void);
 void zero_out_bss(void);
+pde_t *map_kernel(pde_t *pgdir);
+pde_t *map_user(pde_t *pgdir, uint32_t size);
+void *translate_kern(pde_t *pgdir, uint32_t vaddr);
 
 
 #endif

@@ -33,6 +33,11 @@ struct int_regs {
     struct regs saved_regs;
     uint32_t vector_num;
     uint32_t error_code;
+    uint32_t eip;
+    uint32_t cs;
+    uint32_t eflags;
+    uint32_t esp;
+    uint32_t ss;
 };
 
 

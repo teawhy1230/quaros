@@ -25,3 +25,12 @@ void *memset(void *s, int c, uint32_t n) {
     }
     return s;
 }
+
+
+void *memcpy(void *dest, const void *src, uint32_t n) {
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        *((char *)dest + i) = *((char *)src + i);
+    }
+    return dest;
+}
